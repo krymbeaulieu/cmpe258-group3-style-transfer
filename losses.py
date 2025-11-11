@@ -1,5 +1,9 @@
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
+
+
+VGG_FEATURES = []
 
 def gram_matrix(input):
     a, b, c, d = input.size()  # a=batch size(=1)
@@ -39,3 +43,22 @@ class ContentLoss(nn.Module):
     def forward(self, input):
         self.loss = F.mse_loss(input, self.target)
         return input
+
+
+
+def mean_std(feat, eps=1e-5):
+    # Calculate per-channel mean and std
+    size = feat.size()
+    assert len(size) == 4
+    N, C = size[:2]
+    feat_var = feat.view(N, C, -1).var(dim=2) + eps
+    feat_std = feat_var.sqrt().view(N, C, 1, 1)
+    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    return feat_mean, feat_std
+
+def adaptive_instance_normalization(content_feat, style_feat):
+    assert content_feat.size()[:2] == style_feat.size()[:2]
+    style_mean, style_std = mean_std(style_feat)
+    content_mean, content_std = mean_std(content_feat)
+    normalized_feat = (content_feat - content_mean) / content_std
+    return normalized_feat * style_std + style_mean
