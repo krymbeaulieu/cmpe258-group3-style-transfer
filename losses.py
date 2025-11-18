@@ -28,7 +28,21 @@ class StyleLoss(nn.Module):
         G = gram_matrix(input)
         self.loss = F.mse_loss(G, self.target)
         return input
+        
+class StyleLossBatch(nn.Module):
+    def __init__(self, target_feature):
+        super(StyleLossBatch, self).__init__()
+        with torch.no_grad():
+           self.target = gram_matrix(target_feature[0].unsqueeze(0)).detach()  # Use 1 style image in [1, C, H, W]
 
+    def forward(self, input):
+        # Compute Gram for each image in the batch and sum losses
+        self.loss = 0
+        for i in range(input.size(0)):
+            G = gram_matrix(input[i].unsqueeze(0))
+            self.loss += F.mse_loss(G, self.target)
+        self.loss /= input.size(0)  # average over batch
+        return input
 
 class ContentLoss(nn.Module):
 

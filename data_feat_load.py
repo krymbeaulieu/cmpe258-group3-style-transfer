@@ -2,7 +2,9 @@ import torch
 from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
-
+from torch.utils.data import Dataset
+import os
+from pathlib import Path
 
 IMG_SIZE = 512
 
@@ -41,3 +43,28 @@ def get_features(image, model):
         if name in layers:
             features[layers[name]] = x
     return features
+
+
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+import os
+
+class StyleMeDataset(Dataset):
+    # this works for both coco and your chosen art style
+    def __init__(self, image_folder, transform=None):
+        # given path to art style dir: e.g. wiki-art/cubism/
+        # put style name as folder: cubism
+        self.name = Path(image_folder).parts[-1] 
+        self.image_folder = image_folder
+        self.image_files = [f for f in os.listdir(image_folder) if f.lower().endswith(('jpg', 'png', 'jpeg'))]
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.image_files)
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.image_folder, self.image_files[idx])
+        image = Image.open(img_path).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
+        return image

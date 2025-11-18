@@ -6,7 +6,7 @@ from torch.nn.functional import relu
 
 class UNet(nn.Module):
     # https://towardsdatascience.com/cook-your-first-u-net-in-pytorch-b3297a844cf3/
-    # from Krystle's HW 4
+    # from Krystle's HW 4, changed for style transfer
     def __init__(self, n_class):
         super().__init__()
 
@@ -57,6 +57,7 @@ class UNet(nn.Module):
 
         # Output layer
         self.outconv = nn.Conv2d(64, n_class, kernel_size=1)
+        self.activation = nn.Tanh() # project addition: rescale for loss & image visualization
 
     def forward(self, x):
         # Encoder
@@ -101,6 +102,10 @@ class UNet(nn.Module):
         xd42 = relu(self.d42(xd41))
     
         # Output layer
-        out = self.outconv(xd42)
+        out = self.activation(self.outconv(xd42))
+        out = (out + 1) / 2  # Scale from [-1, 1] to [0, 1]
+        # transforms will need 0-1, and the tanh/this out scales it here. 
+        
+
     
         return out
