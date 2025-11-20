@@ -148,3 +148,94 @@ def style_transfer(content, style, model, content_weight=1, style_weight=1e6,
     print(f"Style transfer completed in {total_time:.2f} seconds.")
 
     return target
+
+
+
+# ==========================================
+# ResNet Style Classifier - Training Class
+# ==========================================
+class StyleClassTrainer:
+    def __init__(self, model, train_loader, val_loader, device, save_path, snapshot_path, epochs=10, lr=1e-4, weight_decay=1e-4, patience=4,):
+        self.model = model.to(device)
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.device = device
+        # Saving Paths
+        self.save_path = save_path
+        self.snapshot_path = snapshot_path
+        # Hyperparameters
+        self.epochs = epochs
+        self.start_epoch = 0
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.patience = patience
+        # Loss Function
+        self.criterion = torch.nn.CrossEntropyLoss()
+        # AdamW Optimizer + Cosine Annealing LR Scheduler
+        self.optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.epochs, eta_min=1e-6)
+        # Early Stopping
+        self.best_acc = 0
+        self.p_count = 0 # patience counter
+    # TRAINING LOOP
+    def train(self):
+        print("Starting Style Classifier Training")
+        for epoch in range(self.start_epoch, self.epochs):
+            self.model.train()
+            self.optimizer.zero_grad(set_to_none=True) # reduce memory + speed things up slightly
+            running_loss = 0
+            progress = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.epochs}")
+            for i, (imgs, labels) in enumerate(progress):
+                imgs = imgs.to(self.device)
+                labels = labels.to(self.device)
+                logits = self.model(imgs)
+                loss = self.criterion(logits, labels)
+                # Backprop
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                running_loss += loss.item()
+                progress.set_postfix({"loss": f"{running_loss/(i+1):.4f}"})
+            # Update LR schedule
+            self.scheduler.step()
+            # Validation
+            val_acc = self.validate()
+            print(f"Epoch {epoch+1}: Train Loss={running_loss/len(self.train_loader):.4f}, Val Acc={val_acc:.4f}")
+            # Checkpointing + Early Stopping
+            self.handle_early_stopping(val_acc)
+            if self.p_count >= self.patience:
+                print("Early stopping triggered.")
+                break
+            # Save epoch snapshot
+            torch.save({"epoch": epoch+1,
+                        "model": self.model.state_dict(),
+                        "optimizer": self.optimizer.state_dict()}, self.snapshot_path)
+        print("Training Completed — Best Val Acc:", self.best_acc)
+        print("Best model saved to:", self.save_path)
+    # ================
+    # VALIDATION LOOP
+    # ================
+    def validate(self):
+        self.model.eval()
+        correct, total = 0, 0
+        with torch.no_grad():
+            for imgs, labels in self.val_loader:
+                imgs, labels = imgs.to(self.device), labels.to(self.device)
+                logits = self.model(imgs)
+                preds = logits.argmax(dim=1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
+        return correct / total
+    # ==========================================
+    # BEST MODEL SAVING + EARLY STOPPING LOGIC
+    # ==========================================
+    def handle_early_stopping(self, val_acc):
+        if val_acc > self.best_acc:
+            self.best_acc = val_acc
+            self.p_count = 0
+            torch.save(self.model.state_dict(), self.save_path)
+            print(f"New Best Model Saved — Val Acc: {self.best_acc:.4f}")
+        else:
+            self.p_count += 1
+            print(f"Patience {self.p_count}/{self.patience}")
+            
