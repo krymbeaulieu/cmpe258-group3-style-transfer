@@ -1,5 +1,8 @@
 import torch
 import lpips
+import torch.nn.functional as F
+from torchvision import transforms
+from data_feat_load import load_image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _lpips_model = lpips.LPIPS(net='vgg').to(device).eval()
