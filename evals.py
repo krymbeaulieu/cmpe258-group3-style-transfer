@@ -37,3 +37,31 @@ def activation_style_distance(stylized, target, model, layers=["conv4_1", "conv5
     l2_dist = torch.norm(act_s - act_t, p=2).item()
     cos_dist = F.cosine_similarity(act_s, act_t).item()
     return l2_dist, cos_dist
+
+
+def evaluate_style_classifier(classifier, style_paths, target_labels, device, img_size=512):
+    classifier.eval()
+    # ImageNet normalization is required for ResNet
+    transform = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+    correct = 0
+    total = 0
+    confidences = []
+    all_preds = []
+    # Iterate through images and labels
+    for i, (s_path, true_label) in enumerate(zip(style_paths, target_labels)):
+        img = load_image(s_path, transform, device)   # shape [1, 3, H, W]
+        with torch.no_grad():
+            logits = classifier(img)
+            probs = F.softmax(logits, dim=1)
+            pred = probs.argmax(dim=1).item()
+            confidence = probs[0, true_label].item()
+        all_preds.append(pred)
+        correct += int(pred == true_label)
+        total += 1
+        confidences.append(confidence)
+    accuracy = correct / total
+    avg_confidence = sum(confidences) / len(confidences)
+    return accuracy, avg_confidence, all_preds
